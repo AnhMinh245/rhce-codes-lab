@@ -1,0 +1,118 @@
+---- Cấu hình Repo Server Local ----
+
+# Tạo thư mục mount
+mkdir -p /mnt/iso
+
+# Mount ISO (rhel9.iso đang là /dev/sr1)
+mount /dev/sr1 /mnt/iso
+
+ls /mnt/iso
+
+dnf install rsync -y
+mkdir -p /var/www/html/repos/rhel9
+rsync -aH --info=progress2 /mnt/iso/BaseOS /var/www/html/repos/rhel9/
+rsync -aH --info=progress2 /mnt/iso/AppStream /var/www/html/repos/rhel9/
+
+dnf install -y httpd
+systemctl enable --now httpd
+
+ss -tunlp | grep httpd
+# hoặc
+curl http://localhost
+
+firewall-cmd --add-service=http --permanent
+firewall-cmd --reload
+
+chown -R apache:apache /var/www/html/repos
+restorecon -Rv /var/www/html
+
+curl http://10.20.20.5/repos/rhel9/BaseOS/repodata/repomd.xml | head
+
+
+-------------------------------------
+
+---- Cấu hình DNS Server ----
+
+dnf install -y bind bind-utils
+systemctl enable --now named
+
+vi /etc/named.conf
+
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 { none; };
+    directory "/var/named";
+
+    allow-query       { 10.20.20.0/24; localhost; };
+    allow-recursion   { 10.20.20.0/24; localhost; };
+    allow-query-cache { 10.20.20.0/24; localhost; };
+
+    recursion yes;
+    dnssec-validation yes;
+
+    managed-keys-directory "/var/named/dynamic";
+    include "/etc/crypto-policies/back-ends/bind.config";
+};
+
+zone "rhce" IN {
+    type master;
+    file "rhce.zone";
+    allow-update { none; };
+};
+
+zone "20.20.10.in-addr.arpa" IN {
+    type master;
+    file "rhce.rev";
+    allow-update { none; };
+};
+
+
+cat > /var/named/rhce.zone << 'EOF'
+$TTL 1D
+@   IN  SOA utils.rhce. root.rhce. (
+        2025110901 ; serial
+        1D ; refresh
+        1H ; retry
+        1W ; expire
+        3H ) ; minimum
+    IN  NS  utils.rhce.
+
+utils    IN  A   10.20.20.5
+control  IN  A   10.20.20.10
+node1    IN  A   10.20.20.21
+node2    IN  A   10.20.20.22
+node3    IN  A   10.20.20.23
+EOF
+
+
+cat > /var/named/rhce.rev << 'EOF'
+$TTL 1D
+@   IN  SOA utils.rhce. root.rhce. (
+        2025110901
+        1D 1H 1W 3H )
+    IN  NS  utils.rhce.
+
+5    IN  PTR utils.rhce.
+10   IN  PTR control.rhce.
+21   IN  PTR node1.rhce.
+22   IN  PTR node2.rhce.
+23   IN  PTR node3.rhce.
+EOF
+
+
+chown root:named /var/named/rhce.zone /var/named/rhce.rev
+chmod 640 /var/named/rhce.zone /var/named/rhce.rev
+restorecon -Rv /var/named
+
+
+named-checkconf
+named-checkzone rhce /var/named/rhce.zone
+named-checkzone 20.20.10.in-addr.arpa /var/named/rhce.rev
+
+
+firewall-cmd --add-service=dns --permanent
+firewall-cmd --reload
+systemctl restart named
+systemctl status named
+
+

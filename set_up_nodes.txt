@@ -1,0 +1,33 @@
+---- Cấu hình Local Repo từ Utils ----
+
+🖥️ Cấu hình Máy trạm (Clients)
+
+sudo mkdir /etc/yum.repos.d/old
+sudo mv /etc/yum.repos.d/redhat.repo /etc/yum.repos.d/old/
+
+sudo vi /etc/yum.repos.d/rhel9-local.repo
+[BaseOS]
+name=RHEL9 BaseOS
+baseurl=http://10.20.20.5/repos/rhel9/BaseOS
+enabled=1
+gpgcheck=0
+
+[AppStream]
+name=RHEL9 AppStream
+baseurl=http://10.20.20.5/repos/rhel9/AppStream
+enabled=1
+gpgcheck=0
+
+
+sudo dnf clean all
+sudo dnf repolist
+dnf install vim -y
+
+
+
+---- Cấu hình DNS Client ----
+
+dnf install -y bind-utils
+nmcli con mod ens160 ipv4.dns "10.20.20.5"
+nmcli con up ens160
+
