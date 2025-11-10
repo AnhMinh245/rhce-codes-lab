@@ -1,6 +1,6 @@
 # === MẠNG LAB NỘI BỘ (Host-Only) ===
-10.20.20.5    utils.rhce utils
-10.20.20.10   control.rhce control
-10.20.20.21   node1.rhce node1
-10.20.20.22   node2.rhce node2
-10.20.20.23   node3.rhce node3
+10.1.2.5    utils.rhce utils
+10.1.2.10   control.rhce control
+10.1.2.21   node1.rhce node1
+10.1.2.22   node2.rhce node2
+10.1.2.23   node3.rhce node3

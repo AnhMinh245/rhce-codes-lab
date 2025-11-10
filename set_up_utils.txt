@@ -26,26 +26,27 @@ firewall-cmd --reload
 chown -R apache:apache /var/www/html/repos
 restorecon -Rv /var/www/html
 
-curl http://10.20.20.5/repos/rhel9/BaseOS/repodata/repomd.xml | head
+curl http://10.1.2.5/repos/rhel9/BaseOS/repodata/repomd.xml | head
 
 
 -------------------------------------
 
 ---- Cấu hình DNS Server ----
 
+# --- Cài & bật dịch vụ ---
 dnf install -y bind bind-utils
 systemctl enable --now named
 
-vi /etc/named.conf
-
+# --- Chỉnh /etc/named.conf ---
+cat >/etc/named.conf <<'CONF'
 options {
     listen-on port 53 { any; };
     listen-on-v6 { none; };
     directory "/var/named";
 
-    allow-query       { 10.20.20.0/24; localhost; };
-    allow-recursion   { 10.20.20.0/24; localhost; };
-    allow-query-cache { 10.20.20.0/24; localhost; };
+    allow-query       { 10.1.2.0/24; localhost; };
+    allow-recursion   { 10.1.2.0/24; localhost; };
+    allow-query-cache { 10.1.2.0/24; localhost; };
 
     recursion yes;
     dnssec-validation yes;
@@ -60,35 +61,36 @@ zone "rhce" IN {
     allow-update { none; };
 };
 
-zone "20.20.10.in-addr.arpa" IN {
+zone "2.1.10.in-addr.arpa" IN {
     type master;
     file "rhce.rev";
     allow-update { none; };
 };
+CONF
 
-
+# --- Tạo forward zone ---
 cat > /var/named/rhce.zone << 'EOF'
 $TTL 1D
 @   IN  SOA utils.rhce. root.rhce. (
-        2025110901 ; serial
+        2025111001 ; serial
         1D ; refresh
         1H ; retry
         1W ; expire
         3H ) ; minimum
     IN  NS  utils.rhce.
 
-utils    IN  A   10.20.20.5
-control  IN  A   10.20.20.10
-node1    IN  A   10.20.20.21
-node2    IN  A   10.20.20.22
-node3    IN  A   10.20.20.23
+utils    IN  A   10.1.2.5
+control  IN  A   10.1.2.10
+node1    IN  A   10.1.2.21
+node2    IN  A   10.1.2.22
+node3    IN  A   10.1.2.23
 EOF
 
-
+# --- Tạo reverse zone (2.1.10.in-addr.arpa) ---
 cat > /var/named/rhce.rev << 'EOF'
 $TTL 1D
 @   IN  SOA utils.rhce. root.rhce. (
-        2025110901
+        2025111001
         1D 1H 1W 3H )
     IN  NS  utils.rhce.
 
@@ -99,20 +101,52 @@ $TTL 1D
 23   IN  PTR node3.rhce.
 EOF
 
-
+# --- Quyền & SELinux ---
 chown root:named /var/named/rhce.zone /var/named/rhce.rev
 chmod 640 /var/named/rhce.zone /var/named/rhce.rev
 restorecon -Rv /var/named
 
-
+# --- Kiểm tra cấu hình & zone ---
 named-checkconf
 named-checkzone rhce /var/named/rhce.zone
-named-checkzone 20.20.10.in-addr.arpa /var/named/rhce.rev
+named-checkzone 2.1.10.in-addr.arpa /var/named/rhce.rev
 
-
+# --- Firewall & restart ---
 firewall-cmd --add-service=dns --permanent
 firewall-cmd --reload
 systemctl restart named
-systemctl status named
+systemctl status named --no-pager
+
+
+-------------------------------
+---- Cấu hình Time Server ----
+
+dnf install -y chrony
+systemctl enable --now chronyd
+
+vi /etc/chrony.conf
+
+# Cho phép các host trong mạng lab truy cập NTP server
+allow 10.1.2.0/24
+
+# Đặt stratum thấp để các client ưu tiên máy này (đóng vai local master)
+local stratum 10
+
+# Nếu không có internet, tắt nguồn NTP online
+# hoặc comment các dòng "server ..." mặc định của Red Hat
+# (nếu có internet thì có thể giữ lại để utils tự đồng bộ ra ngoài)
+
+
+firewall-cmd --add-service=ntp --permanent
+firewall-cmd --reload
+
+
+[root@utils ~]# chronyc clients
+Hostname                      NTP   Drop Int IntL Last     Cmd   Drop Int  Last
+===============================================================================
+control.rhce                    6      0   6   -    15       0      0   -     -
+node1.rhce                      7      0   6   -    26       0      0   -     -
+node2.rhce                      5      0   4   -    54       0      0   -     -
+node3.rhce                      5      0   4   -    21       0      0   -     -
 
 
