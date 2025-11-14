@@ -66,4 +66,17 @@ chronyc sources -v
 chronyc tracking
 
 
+---- Cấu hình SSH client ----
+
+sudo sh -c 'f=/etc/ssh/sshd_config; \
+grep -qE "^[#[:space:]]*PermitRootLogin" "$f" && sed -i -E "s/^[#[:space:]]*PermitRootLogin.*/PermitRootLogin yes/" "$f" || echo "PermitRootLogin yes" >>"$f"; \
+grep -qE "^[#[:space:]]*PubkeyAuthentication" "$f" && sed -i -E "s/^[#[:space:]]*PubkeyAuthentication.*/PubkeyAuthentication yes/" "$f" || echo "PubkeyAuthentication yes" >>"$f"; \
+grep -qE "^[#[:space:]]*PasswordAuthentication" "$f" && sed -i -E "s/^[#[:space:]]*PasswordAuthentication.*/PasswordAuthentication yes/" "$f" || echo "PasswordAuthentication yes" >>"$f"'
+
+systemctl restart sshd
+
+---- Other ----
+
+# Tạo user admin
+# Sửa file /etc/hosts trên tất cả các node
 
